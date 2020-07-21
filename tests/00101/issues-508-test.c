@@ -388,16 +388,18 @@ static void test1_func(abts_case *tc, void *data)
 
     /*
      * Send Service request Using InitialUEMessage
-     *  - PDU Session Status
+     *  - Uplink Data Status
      */
     test_ue.service_request_param.integrity_protected = 0;
-    test_ue.service_request_param.pdu_session_status = 1;
-    test_ue.service_request_param.psimask.pdu_session_status =
-        1 << test_sess.psi;
+    test_ue.service_request_param.uplink_data_status = 1;
+    test_ue.service_request_param.
+        psimask.uplink_data_status = 1 << test_sess.psi;
+    test_ue.service_request_param.pdu_session_status = 0;
     nasbuf = testgmm_build_service_request(&test_ue, NULL);
     ABTS_PTR_NOTNULL(tc, nasbuf);
 
     test_ue.service_request_param.integrity_protected = 1;
+    test_ue.service_request_param.uplink_data_status = 0;
     test_ue.service_request_param.pdu_session_status = 0;
     gmmbuf = testgmm_build_service_request(&test_ue, nasbuf);
     ABTS_PTR_NOTNULL(tc, gmmbuf);
@@ -411,8 +413,33 @@ static void test1_func(abts_case *tc, void *data)
     recvbuf = testgnb_ngap_read(ngap);
     ABTS_PTR_NOTNULL(tc, recvbuf);
     testngap_recv(&test_ue, recvbuf);
-    ABTS_INT_EQUAL(tc, 0x2000, test_ue.pdu_session_status);
+    ABTS_INT_EQUAL(tc, 0x0000, test_ue.pdu_session_status);
     ABTS_INT_EQUAL(tc, 0x0000, test_ue.pdu_session_reactivation_result);
+
+    test_sess.gnb_n3_teid = 5;
+
+    /* Send Initial context setup response */
+    sendbuf = testngap_build_initial_context_setup_response(
+            &test_ue, &test_sess);
+    ABTS_PTR_NOTNULL(tc, sendbuf);
+    rv = testgnb_ngap_send(ngap, sendbuf);
+    ABTS_INT_EQUAL(tc, OGS_OK, rv);
+
+    /* Receive GTP-U ICMP Packet */
+    recvbuf = testgnb_gtpu_read(gtpu);
+    ABTS_PTR_NOTNULL(tc, recvbuf);
+    ogs_pkbuf_free(recvbuf);
+
+    /* Send GTP-U ICMP Packet */
+    rv = test_gtpu_build_ping(&sendbuf, &test_sess, "10.45.0.1");
+    ABTS_INT_EQUAL(tc, OGS_OK, rv);
+    rv = testgnb_gtpu_send(gtpu, sendbuf);
+    ABTS_INT_EQUAL(tc, OGS_OK, rv);
+
+    /* Receive GTP-U ICMP Packet */
+    recvbuf = testgnb_gtpu_read(gtpu);
+    ABTS_PTR_NOTNULL(tc, recvbuf);
+    ogs_pkbuf_free(recvbuf);
 
     ogs_msleep(100);
 
